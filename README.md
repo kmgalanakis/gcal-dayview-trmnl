@@ -13,12 +13,13 @@ The two files use Terminus's own export format, so Terminus can import them dire
 
 ## What the screen shows
 
-The extension has two layouts. You pick one with the **Layout** field.
+The extension has three layouts. You pick one with the **Layout** field.
 
 - **timeline** is the default. It draws hour slots like Google Calendar's day view. Overlapping events sit side by side in columns. A legend names each calendar, and each calendar gets its own fill style: solid, outline or striped.
+- **focus** uses the same hour slots, with a different header and footer. The header shows the date and a big countdown, such as "in 27 min", followed by the next meeting's title and time. During a meeting it shows "now" and the time left. The footer names tomorrow's first event.
 - **agenda** shows cards for the current and the next event, then a list of the rest of the day.
 
-Both layouts show all-day events in a row at the top.
+All three layouts show all-day events in a row at the top.
 
 The template does the calendar work in the browser that renders the screen:
 
@@ -67,7 +68,7 @@ A script at the bottom of the template works out which events fall on today and 
 | `max_events` | `7` | Maximum number of events in the agenda list. |
 | `hide_free` | `no` | Set to `yes` to hide timed events marked Free. |
 | `title` | `Google Calendar` | Text in the title bar. |
-| `layout` | `timeline` | `timeline` or `agenda`. |
+| `layout` | `timeline` | `timeline`, `focus` or `agenda`. |
 | `day_start` | `9` | First hour of the timeline. An earlier event stretches the grid. |
 | `day_end` | `18` | Last hour of the timeline. A later event stretches the grid. |
 | `calendar_names` | `Work, Personal` | One name for each iCal address, in the same order. Shown in the legend. |

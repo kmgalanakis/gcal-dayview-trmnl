@@ -139,6 +139,17 @@
       .gtl__now-pill { position: absolute; left: 0; z-index: 5; transform: translateY(-50%); width: 44px; font-size: 11px; font-weight: 800; line-height: 1; text-align: center; padding: 3px 0; border-radius: 999px; background: black; color: white; }
       .gtl__free { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; z-index: 2; }
 
+      /* ---------- focus (big countdown above the day view) ---------- */
+      .gfo__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 3px solid black; }
+      .gfo__date { font-size: 26px; font-weight: 700; }
+      .gfo__updated { font-size: 13px; color: #555; }
+      .gfo__hero { display: flex; flex-direction: column; gap: 6px; padding: 14px 0 10px; }
+      .gfo__count { font-size: 84px; font-weight: 800; line-height: 0.95; letter-spacing: -2px; }
+      .gfo__title { font-size: 30px; font-weight: 500; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gfo__time { font-size: 18px; color: #555; }
+      .gfo__foot { padding-top: 6px; margin-top: 6px; border-top: 2px solid black; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gfo .title_bar { display: none; }
+
       /* ---------- portrait (model rotation 90/270 → 480×800) ---------- */
       .screen--portrait .gcal { flex-direction: column; gap: 14px; }
       .screen--portrait .gcal__side { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; }
@@ -557,7 +568,8 @@ if (typeof module !== 'undefined') module.exports = GCal;
 
     document.getElementById('gcal-updated').textContent = 'Updated ' + cal.updated;
 
-    if ({{ extension.values.layout | default: "agenda" | jsonify }} === 'timeline') {
+    var layout = {{ extension.values.layout | default: "agenda" | jsonify }};
+    if (layout === 'timeline' || layout === 'focus') {
       document.getElementById('gcal-updated').textContent = 'Updated ' + cal.updated;
 
       var split = function (s) { return String(s || '').split(',').map(function (x) { return x.trim(); }).filter(String); };
@@ -606,7 +618,43 @@ if (typeof module !== 'undefined') module.exports = GCal;
         return '<span class="gtl__chip gtl--' + styleOf(a.cal) + '">' + esc(a.title) + '</span>';
       }).join('') + '</div>';
 
-      root.innerHTML = '<div class="gtl">' + top + allDay + '<div class="gtl__grid" id="gtl-grid"></div></div>';
+      if (layout === 'focus') {
+        // Header line, a big countdown to the current or next meeting, and tomorrow's first event at the bottom.
+        var nowMs = Date.now();
+        var longDuration = function (ms) {
+          var m = Math.max(0, Math.round(ms / 60000)), h = Math.floor(m / 60);
+          return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : '');
+        };
+        var hero = cal.current
+          ? { count: 'now', ev: cal.current, extra: ' · ' + longDuration(cal.current._e - nowMs) + ' left' }
+          : cal.next ? { count: 'in ' + longDuration(cal.next._s - nowMs), ev: cal.next, extra: '' } : null;
+        var heroHtml = hero
+          ? '<span class="gfo__count">' + esc(hero.count) + '</span>' +
+            '<span class="gfo__title">' + esc(hero.ev.title) + '</span>' +
+            '<span class="gfo__time">' + esc(hero.ev.start) + '–' + esc(hero.ev.end) + esc(hero.extra) + '</span>'
+          : '<span class="gfo__count">free</span><span class="gfo__title">Nothing else today</span>';
+
+        var tmr = GCal.agenda(events, {
+          declined: declined, offset: 1,
+          timezone: {{ extension.values.timezone | default: "Europe/Athens" | jsonify }},
+          locale: {{ extension.values.locale | default: "en-GB" | jsonify }},
+          hour12: {{ extension.values.clock | default: "24h" | jsonify }} === '12h',
+          hideFree: {{ extension.values.hide_free | default: "no" | jsonify }} === 'yes'
+        });
+        var tomorrow = tmr.all_day.length ? tmr.all_day[0].title + ' (all day)'
+          : tmr.timeline.length ? tmr.timeline[0].title + ' at ' + tmr.timeline[0].start
+          : 'nothing scheduled';
+
+        root.parentNode.classList.add('gfo');
+        root.innerHTML = '<div class="gtl">' +
+          '<div class="gfo__head"><span class="gfo__date">' + esc(cal.weekday + ' ' + cal.day + ' ' + cal.month) + '</span>' +
+          '<span class="gfo__updated">Updated ' + esc(cal.updated) + '</span></div>' +
+          '<div class="gfo__hero">' + heroHtml + '</div>' + allDay +
+          '<div class="gtl__grid" id="gtl-grid"></div>' +
+          '<div class="gfo__foot">Tomorrow: ' + esc(tomorrow) + '</div></div>';
+      } else {
+        root.innerHTML = '<div class="gtl">' + top + allDay + '<div class="gtl__grid" id="gtl-grid"></div></div>';
+      }
 
       // ---- grid ----
       var grid = document.getElementById('gtl-grid');

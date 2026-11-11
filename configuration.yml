@@ -55,9 +55,11 @@ fields:
   options:
   - agenda
   - timeline
+  - focus
   field_type: select
   description: agenda = now/next cards and a list; timeline = hour slots like Google
-    Calendar's day view.
+    Calendar's day view; focus = a big countdown to the next meeting above the day
+    view.
 - name: Timeline first hour
   default: 9
   keyname: day_start
