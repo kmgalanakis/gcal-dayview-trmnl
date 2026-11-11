@@ -4,10 +4,12 @@ This repo holds a [Terminus](https://github.com/usetrmnl/terminus) extension tha
 It reads your calendar from its secret iCal address, so it needs no Google API key or OAuth app.
 I built it for a jailbroken Kindle Paperwhite, but it works on any model Terminus can render for.
 
+The two files use Terminus's own export format, so Terminus can import them directly.
+
 | File | Contents |
 | --- | --- |
-| `template.liquid` | The Liquid template. Paste it into the extension's **Template and Input** field. |
-| `extension.json` | The extension settings, its form fields, the two exchanges, and the screen model the layout was made for. |
+| `configuration.yml` | The extension settings, its form fields, the default data and the two exchanges. |
+| `template.html.liquid` | The Liquid template. |
 
 ## What the screen shows
 
@@ -41,16 +43,18 @@ A script at the bottom of the template works out which events fall on today and 
 
 1. In Google Calendar, open **Settings**, choose your calendar, and go to **Integrate calendar**. Copy the **Secret address in iCal format**.
    Treat this address like a password. Anyone who has it can read your calendar.
-2. In Terminus, open **Extensions** and create a new extension.
-3. Copy the values from the `extension` object in `extension.json`: label, name, description, kind **Poll**, mode **Text**, interval **15**, unit **Minute**.
-4. Under **Fields**, paste the `fields` array from `extension.json`.
-5. Under **Data**, paste the `data` object. Replace the `ical_url` placeholder with your secret address.
+2. Zip the two files. The zip must hold them at its top level, not inside a folder:
+
+   ```bash
+   zip extension.zip configuration.yml template.html.liquid
+   ```
+
+3. In Terminus, open **Extensions**, click **Upload**, and attach `extension.zip`. Terminus creates the extension with its fields, data and both exchanges.
+4. Open the new extension. Under **Data**, replace the `ical_url` placeholder with your secret address.
    For several calendars, put up to 3 addresses in `ical_url`, separated by spaces.
-6. Under **Exchanges**, add both exchanges from `extension.json`. Both use verb **GET**. Copy each URL template and its `accept` header exactly. The URL templates read `ical_url` from the extension data, so they need no editing.
-7. Paste `template.liquid` into **Template and Input**.
-8. Under **Build Matrix**, choose **Models** and select your device's model.
-9. Save the extension, then click **Build**. Terminus renders a screen for each selected model.
-10. Open your device's playlist and add the new screen.
+5. Under **Build Matrix**, choose **Models** and select your device's model. The export format does not include this setting.
+6. Save the extension, then click **Build**. Terminus renders a screen for each selected model.
+7. Open your device's playlist and add the new screen.
 
 ## Settings
 
@@ -72,15 +76,15 @@ A script at the bottom of the template works out which events fall on today and 
 
 ## Screen size
 
-The layout fits a model of 1072×1448 pixels with a scale factor of 1.6.
+The layout fits the model "Amazon Kindle PW 7th Gen (Custom)": 1072×1448 pixels with a scale factor of 1.6.
 Terminus divides the size by the scale factor, so the template has about 670×905 CSS pixels to fill.
 For another model, compute the same CSS size and adjust the font sizes in the `<style>` block if needed.
 
 ## Keep the copies in sync
 
 Terminus stores the live copy of the extension.
-When you change the extension in Terminus, copy the new template and settings back into this repo.
-Never commit a real iCal address.
+When you change the extension in Terminus, click its **Download** link on the **Extensions** page and unzip the export over these two files.
+The export holds your real iCal addresses under `data`. Replace them with the placeholder before you commit, and never commit a real iCal address.
 
 ## License
 
