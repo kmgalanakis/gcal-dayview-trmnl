@@ -1,0 +1,705 @@
+{%- comment -%}
+  Google Calendar Today (private iCal URL).
+  Liquid only ships a slim copy of the feed to the page; the script at the bottom works out
+  which events (including repeats) fall on today in your timezone and draws the agenda.
+{%- endcomment -%}
+{%- assign none = "" | split: "," -%}
+{%- comment -%}
+  Sources are either parsed calendars (text/calendar exchange) or the same feed as plain-text
+  tokens (text/plain exchange). Terminus' iCal parser drops attendee responses, so the raw text is
+  the only place your PARTSTAT=DECLINED survives; only event blocks mentioning DECLINED go to the page.
+{%- endcomment -%}
+{%- assign feeds = none -%}
+{%- assign declined_blocks = none -%}
+{%- for n in (1..6) -%}
+  {%- case n -%}
+    {%- when 1 -%}{%- assign src = source_1 -%}
+    {%- when 2 -%}{%- assign src = source_2 -%}
+    {%- when 3 -%}{%- assign src = source_3 -%}
+    {%- when 4 -%}{%- assign src = source_4 -%}
+    {%- when 5 -%}{%- assign src = source_5 -%}
+    {%- else -%}{%- assign src = source_6 -%}
+  {%- endcase -%}
+  {%- if src and src.first -%}
+    {%- if src.first.events -%}
+      {%- assign feeds = feeds | concat: src -%}
+    {%- else -%}
+      {%- assign blob = src | join: "" -%}
+      {%- if blob contains "DECLINED" -%}
+        {%- assign blocks = blob | split: "BEGIN:VEVENT" -%}
+        {%- for b in blocks -%}
+          {%- if b contains "DECLINED" -%}{%- assign one = b | split: "END:VEVENT" | first | split: "|||" -%}{%- assign declined_blocks = declined_blocks | concat: one -%}{%- endif -%}
+        {%- endfor -%}
+      {%- endif -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- assign me = extension.values.my_email | default: "" | strip -%}
+{%- if me == "" -%}
+  {%- assign me = extension.values.ical_url | default: "" | split: " " | first | split: "/ical/" | last | split: "/" | first | url_decode -%}
+{%- endif -%}
+{%- assign now_s = "now" | date: "%s" | plus: 0 -%}
+{%- assign lo = now_s | minus: 172800 | date: "%Y-%m-%d" -%}
+{%- assign hi = now_s | plus: 172800 | date: "%Y-%m-%d" -%}
+{%- capture events_json -%}
+[{%- assign sep = "" -%}
+{%- for feed in feeds -%}{%- assign fi = forloop.index0 -%}{%- for e in feed.events -%}{%- if e.start_at -%}
+  {%- assign keep = false -%}
+  {%- if e.recurrence_rule.size > 0 or e.recurrences.size > 0 or e.recurrence_id -%}
+    {%- assign keep = true -%}
+  {%- else -%}
+    {%- assign s10 = e.start_at | slice: 0, 10 -%}
+    {%- assign e10 = e.end_at | default: e.start_at | slice: 0, 10 -%}
+    {%- if s10 <= hi and e10 >= lo -%}{%- assign keep = true -%}{%- endif -%}
+  {%- endif -%}
+  {%- if keep -%}
+{{ sep }}{"t":{{ e.summary | jsonify }},"s":{{ e.start_at | jsonify }},"e":{{ e.end_at | jsonify }},"d":{{ e.duration | jsonify }},"l":{{ e.location | jsonify }},"u":{{ e.uid | jsonify }},"r":{{ e.recurrence_rule | jsonify }},"x":{{ e.exceptions | jsonify }},"rd":{{ e.recurrences | jsonify }},"rid":{{ e.recurrence_id | jsonify }},"st":{{ e.status | jsonify }},"tr":{{ e.time_transparency | jsonify }},"f":{{ fi }}}
+    {%- assign sep = "," -%}
+  {%- endif -%}
+{%- endif -%}{%- endfor -%}{%- endfor -%}]
+{%- endcapture -%}
+<div class="{{ extension.css_classes }}">
+  <div class="view view--full">
+    <style>
+      .gcal { display: flex; gap: 24px; width: 100%; height: 100%; }
+      .gcal__side { display: flex; flex-direction: column; gap: 10px; width: 34%; flex-shrink: 0; }
+      .gcal__list { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+      .gcal__date { display: flex; flex-direction: column; line-height: 1; }
+      .gcal__card { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 2px solid black; border-radius: 10px; }
+      .gcal__card--now { background: black; }
+      .gcal__card--now * { color: white !important; }
+      .gcal__allday { display: flex; flex-wrap: wrap; gap: 6px; }
+      .gcal__one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+      .gcal__row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+      .gcal__past .title { text-decoration: line-through; }
+      .gcal__empty { display: flex; flex: 1; align-items: center; justify-content: center; text-align: center; }
+
+      /* ---------- timeline (day view) ---------- */
+      .gtl { display: flex; flex-direction: column; width: 100%; height: 100%; }
+
+      .gtl__top { display: flex; align-items: center; gap: 14px; padding-bottom: 8px; border-bottom: 3px solid black; }
+      .gtl__day { font-size: 58px; font-weight: 700; line-height: 0.85; letter-spacing: -2px; }
+      .gtl__when { display: flex; flex-direction: column; gap: 3px; line-height: 1; }
+      .gtl__weekday { font-size: 22px; font-weight: 700; }
+      .gtl__month { font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; }
+      .gtl__spacer { flex: 1; }
+      .gtl__legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+      .gtl__legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+      .gtl__swatch { width: 14px; height: 14px; border-radius: 4px; box-sizing: border-box; }
+      .gtl__up { display: flex; flex-direction: column; gap: 2px; max-width: 250px; padding: 6px 10px; border-radius: 10px; background: black; color: white; }
+      .gtl__up * { color: white !important; }
+      .gtl__up-kicker { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+      .gtl__up-title { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gtl__up-time { font-size: 12px; }
+
+      .gtl__allday { display: flex; align-items: center; gap: 6px; padding: 6px 0 0 50px; overflow: hidden; white-space: nowrap; }
+      .gtl__chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; box-sizing: border-box; }
+
+      .gtl__grid { position: relative; flex: 1; min-height: 0; margin-top: 12px; }
+      .gtl__past { position: absolute; top: 0; right: 0; background: repeating-linear-gradient(135deg, #c8c8c8 0 1px, transparent 1px 7px); }
+      .gtl__line { position: absolute; right: 0; border-top: 1px solid #9a9a9a; }
+      .gtl__line--half { border-top: 1px dotted #c4c4c4; }
+      .gtl__hour { position: absolute; left: 0; width: 40px; transform: translateY(-50%); font-size: 12px; font-weight: 600; line-height: 1; text-align: right; color: #444; }
+      .gtl__hour--current { color: black; font-weight: 800; }
+
+      .gtl__event { position: absolute; z-index: 2; box-sizing: border-box; overflow: hidden; padding: 2px 7px; border-radius: 7px; display: flex; flex-direction: column; line-height: 1.15; }
+      .gtl__event--compact { justify-content: center; padding-top: 0; padding-bottom: 0; line-height: 1.05; }
+      .gtl__title { font-size: 14px; font-weight: 700; overflow: hidden; }
+      .gtl__title--inline { white-space: nowrap; text-overflow: ellipsis; }
+      .gtl__meta { font-size: 12px; font-weight: 500; }
+      .gtl__tag { position: absolute; top: 3px; right: 4px; font-size: 9px; font-weight: 800; letter-spacing: 1px; padding: 1px 4px; border-radius: 3px; }
+
+      /* calendar styles */
+      .gtl--solid { background: black; border: 2px solid black; color: white; }
+      .gtl--solid * { color: white; }
+      .gtl--outline { background: white; border: 2px solid black; color: black; }
+      .gtl--striped { background: repeating-linear-gradient(135deg, white 0 5px, #bdbdbd 5px 7px); border: 2px solid black; color: black; }
+      .gtl--striped .gtl__title, .gtl--striped .gtl__meta { background: white; align-self: flex-start; padding: 0 3px; margin-left: -3px; border-radius: 3px; }
+      .gtl--solid .gtl__tag { background: white; color: black; }
+      .gtl--outline .gtl__tag, .gtl--striped .gtl__tag { background: black; color: white; }
+
+      /* states */
+      .gtl__event--past.gtl--solid { background: #8a8a8a; border-color: #8a8a8a; }
+      .gtl__event--past.gtl--outline, .gtl__event--past.gtl--striped { border: 2px dashed #8a8a8a; background: white; }
+      .gtl__event--past.gtl--outline *, .gtl__event--past.gtl--striped * { color: #6a6a6a; }
+      .gtl__event--past .gtl__title { text-decoration: line-through; }
+      .gtl__event--now { box-shadow: 0 0 0 2px white, 0 0 0 4px black; z-index: 3; }
+
+      .gtl__now { position: absolute; right: 0; height: 0; border-top: 2px solid black; z-index: 1; }
+      .gtl__now-pill { position: absolute; left: 0; z-index: 5; transform: translateY(-50%); width: 44px; font-size: 11px; font-weight: 800; line-height: 1; text-align: center; padding: 3px 0; border-radius: 999px; background: black; color: white; }
+      .gtl__free { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; z-index: 2; }
+
+      /* ---------- portrait (model rotation 90/270 → 480×800) ---------- */
+      .screen--portrait .gcal { flex-direction: column; gap: 14px; }
+      .screen--portrait .gcal__side { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: stretch; }
+      .screen--portrait .gcal__date { width: 100%; flex-direction: row; align-items: baseline; gap: 10px; }
+      .screen--portrait .gcal__card { flex: 1; min-width: 0; }
+      .screen--portrait .gcal__side > .label { width: 100%; }
+      .gtl__event--narrow .gtl__title, .gtl__event--narrow .gtl__meta { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+      .screen--portrait .gtl__top { flex-wrap: wrap; row-gap: 8px; }
+      .screen--portrait .gtl__up { order: 5; flex-basis: 100%; max-width: none; box-sizing: border-box; flex-direction: row; align-items: baseline; gap: 10px; }
+      .screen--portrait .gtl__up-title { flex: 1; }
+    </style>
+
+    <div class="layout layout--col layout--top layout--left" id="gcal-root">
+      <div class="gcal__empty"><span class="title">Loading calendar…</span></div>
+    </div>
+
+    <div class="title_bar">
+      <span class="title">{{ extension.values.title | default: "Google Calendar" }}</span>
+      <span class="instance" id="gcal-updated"></span>
+    </div>
+  </div>
+</div>
+
+<div id="gcal-data" hidden data-events="{{ events_json | escape }}" data-declined="{{ declined_blocks | jsonify | escape }}" data-me="{{ me | escape }}"></div>
+<script>
+{% raw %}
+/* Google Calendar (iCal) → today's agenda. Runs inside the Terminus screen renderer (Chromium). */
+var GCal = (function () {
+  var DAY = 864e5;
+  var WD = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+  var MIDNIGHT_UTC = /T00:00:00(\+00:00|Z)$/;
+
+  // ---- calendar math on "civil day indexes" (days since 1970-01-01, no timezone) ----
+  function idxOf(y, m, d) { return Math.round(Date.UTC(y, m - 1, d) / DAY); }
+  function civil(idx) {
+    var dt = new Date(idx * DAY);
+    return { idx: idx, y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate(), wd: dt.getUTCDay() };
+  }
+  function daysInMonth(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function ymdIdx(str) { return idxOf(+str.slice(0, 4), +str.slice(5, 7), +str.slice(8, 10)); }
+
+  function parseByDay(list) {
+    return (list || []).map(function (s) {
+      var m = /^([+-]?\d{1,2})?(SU|MO|TU|WE|TH|FR|SA)$/i.exec(String(s));
+      return m ? { n: m[1] ? +m[1] : 0, wd: WD[m[2].toUpperCase()] } : null;
+    }).filter(Boolean);
+  }
+  function nums(list) { return (list || []).map(Number).filter(function (n) { return !isNaN(n); }); }
+
+  // Days of month y/m that a MONTHLY or YEARLY rule lands on.
+  function monthDays(y, m, rule, base) {
+    var dim = daysInMonth(y, m), days = [], d;
+    var byDay = parseByDay(rule.by_day), byMD = nums(rule.by_month_day);
+
+    if (byMD.length) {
+      days = byMD.map(function (v) { return v > 0 ? v : dim + v + 1; })
+                 .filter(function (v) { return v >= 1 && v <= dim; });
+      if (byDay.length) days = days.filter(function (dd) {
+        var wd = civil(idxOf(y, m, dd)).wd;
+        return byDay.some(function (b) { return b.wd === wd; });
+      });
+    } else if (byDay.length) {
+      for (d = 1; d <= dim; d++) {
+        var wd = civil(idxOf(y, m, d)).wd, nth = Math.ceil(d / 7), nthLast = -Math.ceil((dim - d + 1) / 7);
+        if (byDay.some(function (b) { return b.wd === wd && (b.n === 0 || b.n === nth || b.n === nthLast); })) days.push(d);
+      }
+    } else if (base.d <= dim) {
+      days = [base.d];
+    }
+
+    days = days.filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (a, b) { return a - b; });
+
+    var pos = nums(rule.by_set_position);
+    if (pos.length) days = pos.map(function (p) { return p > 0 ? days[p - 1] : days[days.length + p]; })
+                              .filter(function (v) { return v !== undefined; }).sort(function (a, b) { return a - b; });
+    return days;
+  }
+
+  // Does the rule produce an occurrence on civil day `c` (ignoring UNTIL / COUNT / EXDATE)?
+  function matches(rule, base, c) {
+    if (c.idx < base.idx) return false;
+    var interval = rule.interval || 1;
+    var byMonth = nums(rule.by_month);
+    if (byMonth.length && byMonth.indexOf(c.m) < 0) return false;
+
+    switch (String(rule.frequency || '').toUpperCase()) {
+      case 'DAILY': {
+        if ((c.idx - base.idx) % interval) return false;
+        var bd = parseByDay(rule.by_day);
+        if (bd.length && !bd.some(function (b) { return b.wd === c.wd; })) return false;
+        var md = nums(rule.by_month_day);
+        if (md.length && !md.some(function (v) { return (v > 0 ? v : daysInMonth(c.y, c.m) + v + 1) === c.d; })) return false;
+        return true;
+      }
+      case 'WEEKLY': {
+        var wkst = WD[String(rule.week_start || 'MO').toUpperCase()];
+        var weekStart = function (i) { return i - ((civil(i).wd - wkst + 7) % 7); };
+        if (((weekStart(c.idx) - weekStart(base.idx)) / 7) % interval) return false;
+        var days = parseByDay(rule.by_day).map(function (b) { return b.wd; });
+        return (days.length ? days : [base.wd]).indexOf(c.wd) >= 0;
+      }
+      case 'MONTHLY': {
+        if (((c.y - base.y) * 12 + (c.m - base.m)) % interval) return false;
+        return monthDays(c.y, c.m, rule, base).indexOf(c.d) >= 0;
+      }
+      case 'YEARLY': {
+        if ((c.y - base.y) % interval) return false;
+        if (!byMonth.length && c.m !== base.m) return false;
+        return monthDays(c.y, c.m, rule, base).indexOf(c.d) >= 0;
+      }
+    }
+    return false;
+  }
+
+  // ---- timezone helpers (Intl does the heavy lifting) ----
+  function zone(tz) {
+    var f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric'
+    });
+    function parts(ms) {
+      var o = {};
+      f.formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; });
+      var y = +o.year, m = +o.month, d = +o.day;
+      var c = civil(idxOf(y, m, d));
+      c.H = +o.hour % 24; c.M = +o.minute; c.S = +o.second;
+      return c;
+    }
+    function offset(ms) {
+      var p = parts(ms);
+      return Date.UTC(p.y, p.m - 1, p.d, p.H, p.M, p.S) - Math.floor(ms / 1000) * 1000;
+    }
+    function at(y, m, d, H, M) { // wall-clock time in tz → epoch ms
+      var guess = Date.UTC(y, m - 1, d, H || 0, M || 0);
+      var t = guess - offset(guess);
+      return guess - offset(t);
+    }
+    return { parts: parts, at: at };
+  }
+
+  function durationMs(d) {
+    if (!d) return 0;
+    var ms = ((d.weeks || 0) * 7 * 24 * 3600 + (d.days || 0) * 24 * 3600 + (d.hours || 0) * 3600 +
+              (d.minutes || 0) * 60 + (d.seconds || 0)) * 1000;
+    return d.past ? -ms : ms;
+  }
+
+  function untilLimit(until, z) {
+    if (!until) return null;
+    var u = String(until), m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(u);
+    if (!m) { var t = Date.parse(u); return isNaN(t) ? null : t; }
+    if (!m[4]) return z.at(+m[1], +m[2], +m[3] + 1, 0, 0) - 1;           // DATE: whole day inclusive
+    if (m[7]) return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    return z.at(+m[1], +m[2], +m[3], +m[4], +m[5]) + (+m[6]) * 1000;      // floating local time
+  }
+
+  function humanDuration(minutes) {
+    minutes = Math.max(0, Math.round(minutes));
+    if (minutes < 60) return minutes + 'm';
+    var h = Math.floor(minutes / 60), m = minutes % 60;
+    return m ? h + 'h ' + m + 'm' : h + 'h';
+  }
+
+  function cleanLocation(text, max) {
+    text = String(text || '').replace(/\s+/g, ' ').trim();
+    if (/^https?:\/\//.test(text)) text = text.replace(/^https?:\/\/(www\.)?/, '').split(/[/?#]/)[0];
+    return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  }
+
+  // ---- main ----
+  function agenda(events, opts) {
+    opts = opts || {};
+    var tz = opts.timezone || 'UTC';
+    var z = zone(tz);
+    var now = opts.now || Date.now();
+    var limit = opts.limit || 7;
+    var hour12 = !!opts.hour12;
+    var locale = opts.locale || 'en-GB';
+
+    var today = z.parts(now);
+    var todayIdx = idxOf(today.y, today.m, today.d) + (opts.offset || 0);
+    var t = civil(todayIdx);
+    var dayStart = z.at(t.y, t.m, t.d, 0, 0);
+    var dayEnd = z.at(t.y, t.m, t.d + 1, 0, 0);
+
+    var timeFmt = new Intl.DateTimeFormat(locale, { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: hour12 });
+    var fmtTime = function (ms) { return timeFmt.format(new Date(ms)); };
+
+    // Moved / cancelled single instances of a series: uid → { localDateIdx: true }
+    var overrides = {};
+    events.forEach(function (ev) {
+      if (!ev || !ev.rid || !ev.u) return;
+      var key = MIDNIGHT_UTC.test(ev.rid) && MIDNIGHT_UTC.test(ev.s || '') ? ymdIdx(ev.rid) : z.parts(Date.parse(ev.rid)).idx;
+      (overrides[ev.u] = overrides[ev.u] || {})[key] = true;
+    });
+
+    var allDay = [], timed = [], seen = {};
+
+    function addTimed(ev, start, end) {
+      if (!(start < dayEnd && end > dayStart)) return;
+      var key = (ev.u || ev.t) + '|' + start;
+      if (seen[key]) return;
+      seen[key] = true;
+      var ps = z.parts(start), pe = z.parts(end);
+      timed.push({
+        startMin: start <= dayStart ? 0 : ps.H * 60 + ps.M,
+        endMin: end >= dayEnd ? 1440 : Math.max(pe.H * 60 + pe.M, (start <= dayStart ? 0 : ps.H * 60 + ps.M)),
+        title: ev.t || '(No title)',
+        cal: ev.f || 0,
+        location: cleanLocation(ev.l, opts.locationMax || 40),
+        start: start < dayStart ? '…' : fmtTime(start),
+        end: end > dayEnd ? '…' : fmtTime(end),
+        duration: humanDuration((Math.min(end, dayEnd) - Math.max(start, dayStart)) / 60000),
+        _s: start, _e: end
+      });
+    }
+    function addAllDay(ev) {
+      var key = (ev.u || ev.t) + '|allday';
+      if (seen[key]) return;
+      seen[key] = true;
+      allDay.push({ title: ev.t || '(No title)', cal: ev.f || 0 });
+    }
+
+    events.forEach(function (ev) {
+      if (!ev || !ev.s) return;
+      if (String(ev.st).toUpperCase() === 'CANCELLED') return;
+      if (opts.declined && ev.u && opts.declined[ev.u + '|' + (ev.rid ? String(ev.rid).slice(0, 10).replace(/-/g, '') : '')]) return;
+      if (opts.hideFree && String(ev.tr).toUpperCase() === 'TRANSPARENT' && !MIDNIGHT_UTC.test(ev.s)) return;
+
+      var rule = ev.r && ev.r[0];
+      var isAllDay = MIDNIGHT_UTC.test(ev.s) && (!ev.e || MIDNIGHT_UTC.test(ev.e));
+      var exdates = (ev.x || []).map(function (x) {
+        return isAllDay ? ymdIdx(x) : z.parts(Date.parse(x)).idx;
+      });
+      var series = rule && !ev.rid;
+
+      if (isAllDay) {
+        var sIdx = ymdIdx(ev.s);
+        var len = Math.max(1, ev.e ? ymdIdx(ev.e) - sIdx : 1);
+        if (!series) {
+          if (todayIdx >= sIdx && todayIdx < sIdx + len) addAllDay(ev);
+          return;
+        }
+        var base = civil(sIdx), untilMs = untilLimit(rule.until, z);
+        for (var k = 0; k < len; k++) {
+          var c = civil(todayIdx - k);
+          if (occurs(rule, base, c, untilMs === null ? null : z.parts(untilMs).idx, exdates, ev, true)) { addAllDay(ev); break; }
+        }
+        return;
+      }
+
+      var start = Date.parse(ev.s);
+      var end = ev.e ? Date.parse(ev.e) : start + durationMs(ev.d);
+      if (isNaN(start)) return;
+      if (isNaN(end) || end < start) end = start;
+
+      if (!series) { addTimed(ev, start, end); }
+      else {
+        var p0 = z.parts(start), dur = end - start, until = untilLimit(rule.until, z);
+        var span = Math.ceil(dur / DAY) + 1;
+        for (var j = 0; j < span; j++) {
+          var cc = civil(todayIdx - j);
+          var occStart = z.at(cc.y, cc.m, cc.d, p0.H, p0.M);
+          if (until !== null && occStart > until) continue;
+          if (occurs(rule, p0, cc, null, exdates, ev, false)) addTimed(ev, occStart, occStart + dur);
+        }
+      }
+
+      // Extra one-off dates (RDATE) behave like copies of the event.
+      (ev.rd || []).forEach(function (r) {
+        var rs = Date.parse(r);
+        if (!isNaN(rs)) addTimed(ev, rs, rs + (end - start));
+      });
+    });
+
+    function occurs(rule, base, c, untilIdx, exdates, ev, allDayMode) {
+      if (untilIdx !== null && c.idx > untilIdx) return false;
+      if (!matches(rule, base, c)) return false;
+      if (exdates.indexOf(c.idx) >= 0) return false;
+      if (ev.u && overrides[ev.u] && overrides[ev.u][c.idx]) return false;
+      if (rule.count) {
+        var n = 0;
+        for (var i = base.idx; i <= c.idx && n <= rule.count; i++) if (matches(rule, base, civil(i))) n++;
+        if (n > rule.count) return false;
+      }
+      return true;
+    }
+
+    timed.sort(function (a, b) { return a._s - b._s || a._e - b._e; });
+
+    var current = null, next = null;
+    timed.forEach(function (ev) {
+      if (ev._e <= now) ev.state = 'past';
+      else if (ev._s <= now) {
+        ev.state = 'now';
+        ev.relative = humanDuration((ev._e - now) / 60000) + ' left';
+        if (!current) current = ev;
+      } else {
+        ev.state = 'upcoming';
+        ev.relative = 'in ' + humanDuration((ev._s - now) / 60000);
+        if (!next) next = ev;
+      }
+    });
+    if (next) next.state = 'next';
+
+    columns(timed, 15);
+
+    var nowParts = z.parts(now);
+    var nowMin = now >= dayStart && now < dayEnd ? nowParts.H * 60 + nowParts.M : null;
+
+    var display = timed.slice();
+    while (display.length > limit && display[0].state === 'past') display.shift();
+    var hidden = timed.length - Math.min(display.length, limit);
+    display = display.slice(0, limit);
+
+    var dayDate = new Date(dayStart + 12 * 3600e3);
+    var label = function (o) { return new Intl.DateTimeFormat(locale, Object.assign({ timeZone: tz }, o)).format(dayDate); };
+
+    return {
+      weekday: label({ weekday: 'long' }),
+      day: String(t.d),
+      month: label({ month: 'long' }),
+      year: String(t.y),
+      updated: fmtTime(now),
+      total: timed.length,
+      remaining: timed.filter(function (e) { return e.state !== 'past'; }).length,
+      hidden: hidden,
+      all_day: allDay,
+      current: current,
+      next: next,
+      events: display,
+      timeline: timed,
+      now_min: nowMin
+    };
+  }
+
+  // Google-style side-by-side columns for overlapping events (sorted by start).
+  // minMinutes: the smallest duration an event visually occupies, so short blocks don't collide.
+  function columns(list, minMinutes) {
+    var cluster = [], clusterEnd = -1;
+    var visualEnd = function (e) { return Math.max(e.endMin, e.startMin + minMinutes); };
+    var close = function () {
+      var cols = 1 + Math.max.apply(null, cluster.map(function (e) { return e.col; }));
+      cluster.forEach(function (e) { e.cols = cols; });
+      cluster = [];
+    };
+    list.forEach(function (ev) {
+      if (cluster.length && ev.startMin >= clusterEnd) close();
+      var used = cluster.filter(function (o) { return visualEnd(o) > ev.startMin; }).map(function (o) { return o.col; });
+      var col = 0;
+      while (used.indexOf(col) >= 0) col++;
+      ev.col = col;
+      cluster.push(ev);
+      clusterEnd = Math.max(clusterEnd, visualEnd(ev));
+    });
+    if (cluster.length) close();
+    return list;
+  }
+
+  // Raw VEVENT text (whitespace removed by Terminus' text parser, so folded lines are already joined)
+  // → { "uid|" : true } for a declined series, { "uid|YYYYMMDD" : true } for a declined single instance.
+  var PROPS = 'SEQUENCE|STATUS|SUMMARY|TRANSP|CREATED|DESCRIPTION|LAST-MODIFIED|LOCATION|DTSTAMP|DTSTART|DTEND|DURATION|RRULE|EXDATE|RDATE|RECURRENCE-ID|ATTENDEE|ORGANIZER|BEGIN|END|CLASS|URL|ATTACH|CATEGORIES|PRIORITY|COLOR|CONFERENCE|IMAGE|X-[A-Z0-9-]+';
+  function declinedKeys(blocks, me) {
+    var out = {};
+    me = String(me || '').trim().toLowerCase();
+    if (!me) return out;
+    var mine = new RegExp('attendee;[^:]*partstat=declined[^:]*:mailto:' + me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    var uidRe = new RegExp('UID:(.+?)(?=(?:' + PROPS + ')[;:]|$)');
+    (blocks || []).forEach(function (b) {
+      b = String(b);
+      if (!mine.test(b.toLowerCase())) return;
+      var uid = uidRe.exec(b), rid = /RECURRENCE-ID[^:]*:(\d{8})/.exec(b);
+      if (uid) out[uid[1] + '|' + (rid ? rid[1] : '')] = true;
+    });
+    return out;
+  }
+
+  return { agenda: agenda, columns: columns, declinedKeys: declinedKeys, _matches: matches, _civil: civil, _idxOf: idxOf, _zone: zone };
+})();
+
+if (typeof module !== 'undefined') module.exports = GCal;
+{% endraw %}
+
+(function () {
+  var root = document.getElementById('gcal-root');
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  var message = function (title, text) {
+    root.innerHTML = '<div class="gcal__empty"><div class="flex flex--col gap--small"><span class="title">' + esc(title) +
+      '</span>' + (text ? '<span class="description">' + esc(text) + '</span>' : '') + '</div></div>';
+  };
+
+  try {
+    var feedCount = {{ feeds.size }};
+    if (!feedCount) return message('Waiting for calendar data…', 'Check the extension\'s Exchanges → Errors tab.');
+
+    var dataEl = document.getElementById('gcal-data');
+    var events = JSON.parse(dataEl.getAttribute('data-events') || '[]');
+    var declined = GCal.declinedKeys(JSON.parse(dataEl.getAttribute('data-declined') || '[]'), dataEl.getAttribute('data-me'));
+    var cal = GCal.agenda(events, {
+      declined: declined,
+      timezone: {{ extension.values.timezone | default: "Europe/Athens" | jsonify }},
+      locale: {{ extension.values.locale | default: "en-GB" | jsonify }},
+      hour12: {{ extension.values.clock | default: "24h" | jsonify }} === '12h',
+      hideFree: {{ extension.values.hide_free | default: "no" | jsonify }} === 'yes',
+      limit: {{ extension.values.max_events | default: 7 | plus: 0 }}
+    });
+
+    document.getElementById('gcal-updated').textContent = 'Updated ' + cal.updated;
+
+    if ({{ extension.values.layout | default: "agenda" | jsonify }} === 'timeline') {
+      document.getElementById('gcal-updated').textContent = 'Updated ' + cal.updated;
+
+      var split = function (s) { return String(s || '').split(',').map(function (x) { return x.trim(); }).filter(String); };
+      var calNames = split({{ extension.values.calendar_names | default: "" | jsonify }});
+      var calStyles = split({{ extension.values.calendar_styles | default: "solid, outline, striped" | jsonify }});
+      var styleOf = function (i) {
+        var st = (calStyles[i] || ['solid', 'outline', 'striped'][i] || 'outline').toLowerCase();
+        return ['solid', 'outline', 'striped'].indexOf(st) >= 0 ? st : 'outline';
+      };
+
+      var dayStartH = {{ extension.values.day_start | default: 9 | plus: 0 }};
+      var dayEndH = {{ extension.values.day_end | default: 18 | plus: 0 }};
+      cal.timeline.forEach(function (ev) {
+        dayStartH = Math.min(dayStartH, Math.floor(ev.startMin / 60));
+        dayEndH = Math.max(dayEndH, Math.ceil(ev.endMin / 60));
+      });
+      dayStartH = Math.max(0, dayStartH);
+      dayEndH = Math.min(24, Math.max(dayEndH, dayStartH + 1));
+
+      // ---- header: big date, legend, now/next pill ----
+      var up = cal.current
+        ? { kicker: 'Now · ' + cal.current.relative, ev: cal.current }
+        : cal.next ? { kicker: 'Next · ' + cal.next.relative, ev: cal.next } : null;
+      var usedCals = {};
+      cal.timeline.concat(cal.all_day).forEach(function (e) { usedCals[e.cal] = true; });
+      var legendIds = Object.keys(usedCals).map(Number).sort();
+      var legend = (calNames.length > 1 || legendIds.length > 1) ? '<div class="gtl__legend">' +
+        legendIds.map(function (i) {
+          return '<span class="gtl__legend-item"><span class="gtl__swatch gtl--' + styleOf(i) + '"></span>' +
+            esc(calNames[i] || ('Calendar ' + (i + 1))) + '</span>';
+        }).join('') + '</div>' : '';
+
+      var top = '<div class="gtl__top">' +
+        '<span class="gtl__day">' + esc(cal.day) + '</span>' +
+        '<div class="gtl__when"><span class="gtl__weekday">' + esc(cal.weekday) + '</span>' +
+        '<span class="gtl__month">' + esc(cal.month) + ' ' + esc(cal.year) + '</span>' +
+        '<span class="gtl__month">' + (cal.total ? cal.remaining + ' of ' + cal.total + ' meetings left' : 'No meetings') + '</span></div>' +
+        '<span class="gtl__spacer"></span>' + legend +
+        (up ? '<div class="gtl__up"><span class="gtl__up-kicker">' + esc(up.kicker) + '</span>' +
+          '<span class="gtl__up-title">' + esc(up.ev.title) + '</span>' +
+          '<span class="gtl__up-time">' + esc(up.ev.start) + ' – ' + esc(up.ev.end) + '</span></div>'
+          : '<div class="gtl__up"><span class="gtl__up-kicker">Up next</span><span class="gtl__up-title">Nothing else today</span></div>') +
+        '</div>';
+
+      var allDay = !cal.all_day.length ? '' : '<div class="gtl__allday">' + cal.all_day.slice(0, 5).map(function (a) {
+        var t = a.title.length > 26 ? a.title.slice(0, 25) + '…' : a.title;
+        return '<span class="gtl__chip gtl--' + styleOf(a.cal) + '">' + esc(t) + '</span>';
+      }).join('') + '</div>';
+
+      root.innerHTML = '<div class="gtl">' + top + allDay + '<div class="gtl__grid" id="gtl-grid"></div></div>';
+
+      // ---- grid ----
+      var grid = document.getElementById('gtl-grid');
+      var H = grid.clientHeight, W = grid.clientWidth, gutter = 48, minBlock = 22;
+      var ppm = H / ((dayEndH - dayStartH) * 60);
+      GCal.columns(cal.timeline, Math.ceil((minBlock + 2) / ppm));
+      var y = function (min) { return Math.round((Math.min(Math.max(min, dayStartH * 60), dayEndH * 60) - dayStartH * 60) * ppm); };
+      var twelve = {{ extension.values.clock | default: "24h" | jsonify }} === '12h';
+      var hourLabel = function (h) {
+        if (!twelve) return (h < 10 ? '0' : '') + h + ':00';
+        return ((h % 12) || 12) + (h < 12 || h === 24 ? 'am' : 'pm');
+      };
+      var nowIn = cal.now_min !== null && cal.now_min >= dayStartH * 60 && cal.now_min <= dayEndH * 60;
+      var nowHour = cal.now_min === null ? -1 : Math.floor(cal.now_min / 60);
+
+      var html = '';
+      // Elapsed part of the day gets a light hatch, like a "done" zone.
+      if (cal.now_min !== null && cal.now_min > dayStartH * 60) {
+        html += '<div class="gtl__past" style="left:' + gutter + 'px;height:' + y(cal.now_min) + 'px"></div>';
+      }
+      for (var h = dayStartH; h <= dayEndH; h++) {
+        var lineTop = y(h * 60);
+        html += '<div class="gtl__line" style="top:' + lineTop + 'px;left:' + gutter + 'px"></div>';
+        if (h < dayEndH) {
+          var nearNow = nowIn && Math.abs(y(cal.now_min) - lineTop) < 13; // the pill covers this label
+          if (!nearNow) html += '<span class="gtl__hour' + (h === nowHour ? ' gtl__hour--current' : '') + '" style="top:' + lineTop + 'px">' + hourLabel(h) + '</span>';
+          if (ppm * 60 >= 44) html += '<div class="gtl__line gtl__line--half" style="top:' + y(h * 60 + 30) + 'px;left:' + gutter + 'px"></div>';
+        }
+      }
+
+      var colsW = W - gutter - 6;
+      cal.timeline.forEach(function (ev) {
+        var t0 = y(ev.startMin), t1 = y(ev.endMin);
+        var height = Math.max(t1 - t0 - 3, minBlock);
+        var width = colsW / ev.cols;
+        var left = gutter + 6 + ev.col * width;
+        var time = ev.start + (ev.end !== ev.start ? ' – ' + ev.end : '');
+        var tag = ev.state === 'now' ? 'NOW' : ev.state === 'next' ? 'NEXT' : '';
+        var roomy = height >= 40;
+        var narrow = width < 150;
+        var body = roomy
+          ? '<span class="gtl__title">' + esc(ev.title) + '</span><span class="gtl__meta">' + esc(narrow ? ev.start : time + ' · ' + ev.duration) +
+            (ev.location && height >= 58 ? '<br>' + esc(ev.location) : '') + '</span>'
+          : '<span class="gtl__title gtl__title--inline">' + esc(ev.title) + '<span class="gtl__meta"> · ' + esc(ev.start) + '</span></span>';
+        if (tag && roomy && !narrow) body += '<span class="gtl__tag">' + tag + '</span>';
+        html += '<div class="gtl__event gtl__event--' + ev.state + ' gtl--' + styleOf(ev.cal) + (roomy ? '' : ' gtl__event--compact') + (narrow ? ' gtl__event--narrow' : '') +
+          '" style="top:' + t0 + 'px;height:' + height + 'px;left:' + Math.round(left) + 'px;width:' + Math.round(width - 4) + 'px">' + body + '</div>';
+      });
+
+      if (nowIn) {
+        var ny = y(cal.now_min);
+        html += '<div class="gtl__now" style="top:' + ny + 'px;left:' + gutter + 'px"></div>' +
+          '<span class="gtl__now-pill" style="top:' + ny + 'px">' + esc(cal.updated) + '</span>';
+      }
+
+      if (!cal.timeline.length) {
+        html += '<div class="gtl__free"><span class="title">A clear day</span><span class="description">No meetings on the calendar.</span></div>';
+      }
+
+      grid.innerHTML = html;
+      return;
+    }
+
+    var card = function (kind, ev, extra) {
+      return '<div class="gcal__card' + (kind === 'NOW' ? ' gcal__card--now' : '') + '">' +
+        '<div class="gcal__row"><span class="label label--small">' + kind + '</span>' +
+        '<span class="label label--small' + (kind === 'NOW' ? '' : ' label--underline') + '">' + esc(ev.relative) + '</span></div>' +
+        '<span class="title title--small gcal__one-line">' + esc(ev.title) + '</span>' +
+        '<span class="description">' + esc(ev.start) + ' – ' + esc(ev.end) + '</span></div>';
+    };
+
+    var side = '<div class="gcal__date"><span class="label label--small">' + esc(cal.weekday) + '</span>' +
+      '<span class="value value--xxxlarge">' + esc(cal.day) + '</span>' +
+      '<span class="title title--small">' + esc(cal.month) + ' ' + esc(cal.year) + '</span></div>';
+    if (cal.current) side += card('NOW', cal.current);
+    if (cal.next) side += card('NEXT', cal.next);
+    else if (!cal.current) side += '<div class="gcal__card"><span class="label label--small">NEXT</span>' +
+      '<span class="title title--small">You\'re free</span><span class="description">Nothing else today</span></div>';
+    side += '<span class="label label--small label--gray">' + cal.total + (cal.total === 1 ? ' event' : ' events') +
+      ' · ' + cal.remaining + ' left</span>';
+
+    var list = '';
+    if (cal.all_day.length) {
+      list += '<div class="gcal__allday">' + cal.all_day.slice(0, 3).map(function (a) {
+        var t = a.title.length > 28 ? a.title.slice(0, 27) + '…' : a.title;
+        return '<span class="label label--small label--outline">' + esc(t) + '</span>';
+      }).join('') + '</div>';
+    }
+    if (!cal.events.length) {
+      list += '<div class="gcal__empty"><div class="flex flex--col gap--small"><span class="title">No meetings today</span>' +
+        '<span class="description">Enjoy the focus time.</span></div></div>';
+    }
+    if (cal.hidden > 0) list += '<span class="label label--small label--gray">+ ' + cal.hidden + ' more not shown</span>';
+    cal.events.forEach(function (ev) {
+      var cls = { now: 'item--emphasis-3', next: 'item--emphasis-2', past: 'gcal__past' }[ev.state] || '';
+      var badge = ev.state === 'now' ? '<span class="label label--small label--filled">NOW</span>'
+                : ev.state === 'next' ? '<span class="label label--small label--outline">NEXT</span>' : '';
+      list += '<div class="item ' + cls + '"><div class="meta"></div><div class="content">' +
+        '<div class="gcal__row"><span class="title title--small gcal__one-line">' + esc(ev.title) + '</span>' + badge + '</div>' +
+        '<div class="flex gap--small"><span class="label label--small label--underline">' + esc(ev.start) + ' – ' + esc(ev.end) + '</span>' +
+        (ev.location ? '<span class="label label--small gcal__one-line">' + esc(ev.location) + '</span>' : '') +
+        '</div></div></div>';
+    });
+
+    root.innerHTML = '<div class="gcal"><div class="gcal__side">' + side + '</div><div class="gcal__list">' + list + '</div></div>';
+  } catch (error) {
+    message('Calendar unavailable', error && error.message);
+  }
+})();
+</script>

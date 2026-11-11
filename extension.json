@@ -1,0 +1,162 @@
+{
+  "extension": {
+    "label": "Google Calendar Day View (iCal) - Kindle",
+    "name": "google_calendar_ical_timeline_kindle",
+    "description": "Today's agenda from your Google Calendar secret iCal address, with repeating events expanded.",
+    "kind": "poll",
+    "mode": "text",
+    "tags": [
+      "calendar",
+      "google"
+    ],
+    "interval": 15,
+    "unit": "minute",
+    "days": [],
+    "last_day_of_month": false,
+    "start_at": "2026-01-01T00:00:00",
+    "fields": [
+      {
+        "name": "Secret iCal address",
+        "default": "https://calendar.google.com/calendar/ical/REPLACE_ME/private-REPLACE_ME/basic.ics",
+        "keyname": "ical_url",
+        "field_type": "url",
+        "description": "Google Calendar → Settings → your calendar → Integrate calendar → Secret address in iCal format. Separate several with a space (max 3)."
+      },
+      {
+        "name": "Timezone",
+        "default": "Europe/Athens",
+        "keyname": "timezone",
+        "field_type": "string",
+        "description": "IANA name, e.g. Europe/Athens."
+      },
+      {
+        "name": "Clock",
+        "default": "24h",
+        "keyname": "clock",
+        "options": [
+          "24h",
+          "12h"
+        ],
+        "field_type": "select"
+      },
+      {
+        "name": "Locale",
+        "default": "en-GB",
+        "keyname": "locale",
+        "field_type": "string",
+        "description": "For the weekday and month names, e.g. en-GB or el-GR."
+      },
+      {
+        "name": "Max events in the list",
+        "default": 7,
+        "keyname": "max_events",
+        "field_type": "number"
+      },
+      {
+        "name": "Hide timed events marked Free",
+        "default": "no",
+        "keyname": "hide_free",
+        "options": [
+          "no",
+          "yes"
+        ],
+        "field_type": "select"
+      },
+      {
+        "name": "Title bar text",
+        "default": "Google Calendar",
+        "keyname": "title",
+        "field_type": "string"
+      },
+      {
+        "name": "Layout",
+        "default": "timeline",
+        "keyname": "layout",
+        "options": [
+          "agenda",
+          "timeline"
+        ],
+        "field_type": "select",
+        "description": "agenda = now/next cards and a list; timeline = hour slots like Google Calendar's day view."
+      },
+      {
+        "name": "Timeline first hour",
+        "default": 9,
+        "keyname": "day_start",
+        "field_type": "number",
+        "description": "Earlier events stretch the grid automatically."
+      },
+      {
+        "name": "Timeline last hour",
+        "default": 18,
+        "keyname": "day_end",
+        "field_type": "number",
+        "description": "Later events stretch the grid automatically."
+      },
+      {
+        "name": "Calendar names",
+        "default": "Work, Personal",
+        "keyname": "calendar_names",
+        "field_type": "string",
+        "description": "Comma separated, in the same order as the iCal URLs. Shown in the day view legend."
+      },
+      {
+        "name": "Calendar styles",
+        "default": "solid, outline, striped",
+        "keyname": "calendar_styles",
+        "field_type": "string",
+        "description": "Comma separated, one per iCal URL. Options are solid, outline or striped."
+      },
+      {
+        "name": "Your email (for declined events)",
+        "default": "",
+        "keyname": "my_email",
+        "field_type": "string",
+        "description": "Optional. Taken from the first iCal address when empty."
+      }
+    ],
+    "data": {
+      "values": {
+        "clock": "24h",
+        "title": "Google Calendar",
+        "layout": "timeline",
+        "locale": "en-GB",
+        "day_end": 22,
+        "ical_url": "https://calendar.google.com/calendar/ical/REPLACE_ME/private-REPLACE_ME/basic.ics",
+        "timezone": "Europe/Athens",
+        "day_start": 9,
+        "hide_free": "no",
+        "max_events": 15,
+        "calendar_names": "Work, Personal",
+        "calendar_styles": "solid, outline, striped"
+      }
+    }
+  },
+  "exchanges": [
+    {
+      "verb": "get",
+      "template": "{{ extension.values.ical_url }}",
+      "headers": {
+        "accept": "text/calendar"
+      },
+      "body": ""
+    },
+    {
+      "verb": "get",
+      "template": "{{ extension.values.ical_url | split: ' ' | first }}",
+      "headers": {
+        "accept": "text/plain"
+      },
+      "body": ""
+    }
+  ],
+  "model": {
+    "label": "Amazon Kindle PW 7th Gen (Custom)",
+    "width": 1072,
+    "height": 1448,
+    "scale_factor": 1.6,
+    "rotation": 0,
+    "bit_depth": 8,
+    "mime_type": "image/png"
+  }
+}
