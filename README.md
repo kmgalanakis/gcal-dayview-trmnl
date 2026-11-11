@@ -32,9 +32,10 @@ Terminus fetches the calendar through two exchanges.
 1. The first exchange asks for `text/calendar`. Terminus parses the feed into events, and Liquid passes a slim copy of them to the page.
 2. The second exchange asks for `text/plain` and gets the raw feed as text. Terminus' iCal parser drops attendee responses, so the raw text is the only place where `PARTSTAT=DECLINED` survives. The template sends only the event blocks that mention `DECLINED` to the page.
 
-A script at the bottom of the template works out which events fall on today and draws the layout.
+Both exchanges use every address in `ical_url`. Terminus makes one request per address, so 3 calendars give 6 sources.
+The template takes your email from each iCal address. Declined events are hidden in every calendar, even calendars from different Google accounts.
 
-The second exchange reads only the first iCal address. Declined events are hidden for that calendar only.
+A script at the bottom of the template works out which events fall on today and draws the layout.
 
 ## Set it up
 
@@ -67,7 +68,7 @@ The second exchange reads only the first iCal address. Declined events are hidde
 | `day_end` | `18` | Last hour of the timeline. A later event stretches the grid. |
 | `calendar_names` | `Work, Personal` | One name for each iCal address, in the same order. Shown in the legend. |
 | `calendar_styles` | `solid, outline, striped` | One style for each iCal address. |
-| `my_email` | empty | Your email, used to find events you declined. When empty, the template takes it from the first iCal address. |
+| `my_email` | empty | Your emails, separated by spaces, used to find events you declined. When empty, the template takes one from each iCal address. Set it when a calendar's iCal address holds a calendar ID instead of your email. |
 
 ## Screen size
 

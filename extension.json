@@ -108,11 +108,11 @@
         "description": "Comma separated, one per iCal URL. Options are solid, outline or striped."
       },
       {
-        "name": "Your email (for declined events)",
+        "name": "Your emails (for declined events)",
         "default": "",
         "keyname": "my_email",
         "field_type": "string",
-        "description": "Optional. Taken from the first iCal address when empty."
+        "description": "Optional. One or more addresses, separated by spaces. When empty, taken from every iCal address."
       }
     ],
     "data": {
@@ -143,7 +143,7 @@
     },
     {
       "verb": "get",
-      "template": "{{ extension.values.ical_url | split: ' ' | first }}",
+      "template": "{{ extension.values.ical_url }}",
       "headers": {
         "accept": "text/plain"
       },

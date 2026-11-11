@@ -36,7 +36,15 @@
 {%- endfor -%}
 {%- assign me = extension.values.my_email | default: "" | strip -%}
 {%- if me == "" -%}
-  {%- assign me = extension.values.ical_url | default: "" | split: " " | first | split: "/ical/" | last | split: "/" | first | url_decode -%}
+  {%- comment -%} One address per iCal URL, so declines are found in calendars from other accounts too. {%- endcomment -%}
+  {%- assign urls = extension.values.ical_url | default: "" | split: " " -%}
+  {%- for u in urls -%}
+    {%- if u contains "/ical/" -%}
+      {%- assign one = u | split: "/ical/" | last | split: "/" | first | url_decode -%}
+      {%- assign me = me | append: " " | append: one -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- assign me = me | strip -%}
 {%- endif -%}
 {%- assign now_s = "now" | date: "%s" | plus: 0 -%}
 {%- assign lo = now_s | minus: 172800 | date: "%Y-%m-%d" -%}
@@ -493,9 +501,12 @@ var GCal = (function () {
   var PROPS = 'SEQUENCE|STATUS|SUMMARY|TRANSP|CREATED|DESCRIPTION|LAST-MODIFIED|LOCATION|DTSTAMP|DTSTART|DTEND|DURATION|RRULE|EXDATE|RDATE|RECURRENCE-ID|ATTENDEE|ORGANIZER|BEGIN|END|CLASS|URL|ATTACH|CATEGORIES|PRIORITY|COLOR|CONFERENCE|IMAGE|X-[A-Z0-9-]+';
   function declinedKeys(blocks, me) {
     var out = {};
-    me = String(me || '').trim().toLowerCase();
-    if (!me) return out;
-    var mine = new RegExp('attendee;[^:]*partstat=declined[^:]*:mailto:' + me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    // `me` holds one or more addresses, separated by spaces or commas.
+    var emails = String(me || '').toLowerCase().split(/[\s,]+/).filter(Boolean);
+    if (!emails.length) return out;
+    var mine = new RegExp('attendee;[^:]*partstat=declined[^:]*:mailto:(?:' + emails.map(function (e) {
+      return e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|') + ')');
     var uidRe = new RegExp('UID:(.+?)(?=(?:' + PROPS + ')[;:]|$)');
     (blocks || []).forEach(function (b) {
       b = String(b);
