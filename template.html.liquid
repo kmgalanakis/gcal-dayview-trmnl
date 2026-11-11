@@ -102,6 +102,8 @@
 
       .gtl__allday { display: flex; align-items: center; gap: 6px; padding: 6px 0 0 50px; overflow: hidden; white-space: nowrap; }
       .gtl__chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; box-sizing: border-box; }
+      /* All-day events share the full width of the row. */
+      .gtl__allday .gtl__chip { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
       .gtl__grid { position: relative; flex: 1; min-height: 0; margin-top: 12px; }
       .gtl__past { position: absolute; top: 0; right: 0; background: repeating-linear-gradient(135deg, #c8c8c8 0 1px, transparent 1px 7px); }
@@ -601,8 +603,7 @@ if (typeof module !== 'undefined') module.exports = GCal;
         '</div>';
 
       var allDay = !cal.all_day.length ? '' : '<div class="gtl__allday">' + cal.all_day.slice(0, 5).map(function (a) {
-        var t = a.title.length > 26 ? a.title.slice(0, 25) + '…' : a.title;
-        return '<span class="gtl__chip gtl--' + styleOf(a.cal) + '">' + esc(t) + '</span>';
+        return '<span class="gtl__chip gtl--' + styleOf(a.cal) + '">' + esc(a.title) + '</span>';
       }).join('') + '</div>';
 
       root.innerHTML = '<div class="gtl">' + top + allDay + '<div class="gtl__grid" id="gtl-grid"></div></div>';
