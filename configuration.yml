@@ -45,6 +45,12 @@ fields:
   - 'no'
   - 'yes'
   field_type: select
+- name: Hide events
+  default: ''
+  keyname: hide_titles
+  field_type: string
+  description: Comma separated. Hides every event whose title contains one of these
+    phrases, e.g. Core working hours, Lunch. Case does not matter.
 - name: Title bar text
   default: Google Calendar
   keyname: title

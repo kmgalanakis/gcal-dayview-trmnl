@@ -326,6 +326,13 @@ var GCal = (function () {
     var limit = opts.limit || 7;
     var hour12 = !!opts.hour12;
     var locale = opts.locale || 'en-GB';
+    // Hide events whose title contains any of these phrases (comma separated, case does not matter).
+    var hidePhrases = String(opts.hideTitles || '').toLowerCase().split(',')
+      .map(function (p) { return p.trim(); }).filter(Boolean);
+    var hiddenTitle = function (title) {
+      var t = String(title || '').toLowerCase();
+      return hidePhrases.some(function (p) { return t.indexOf(p) >= 0; });
+    };
 
     var today = z.parts(now);
     var todayIdx = idxOf(today.y, today.m, today.d) + (opts.offset || 0);
@@ -376,6 +383,7 @@ var GCal = (function () {
     events.forEach(function (ev) {
       if (!ev || !ev.s) return;
       if (String(ev.st).toUpperCase() === 'CANCELLED') return;
+      if (hidePhrases.length && hiddenTitle(ev.t)) return;
       if (opts.declined && ev.u && opts.declined[ev.u + '|' + (ev.rid ? String(ev.rid).slice(0, 10).replace(/-/g, '') : '')]) return;
       if (opts.hideFree && String(ev.tr).toUpperCase() === 'TRANSPARENT' && !MIDNIGHT_UTC.test(ev.s)) return;
 
@@ -561,6 +569,7 @@ if (typeof module !== 'undefined') module.exports = GCal;
       locale: {{ extension.values.locale | default: "en-GB" | jsonify }},
       hour12: {{ extension.values.clock | default: "24h" | jsonify }} === '12h',
       hideFree: {{ extension.values.hide_free | default: "no" | jsonify }} === 'yes',
+      hideTitles: {{ extension.values.hide_titles | default: "" | jsonify }},
       limit: {{ extension.values.max_events | default: 7 | plus: 0 }}
     });
 
@@ -637,7 +646,8 @@ if (typeof module !== 'undefined') module.exports = GCal;
           timezone: {{ extension.values.timezone | default: "Europe/Athens" | jsonify }},
           locale: {{ extension.values.locale | default: "en-GB" | jsonify }},
           hour12: {{ extension.values.clock | default: "24h" | jsonify }} === '12h',
-          hideFree: {{ extension.values.hide_free | default: "no" | jsonify }} === 'yes'
+          hideFree: {{ extension.values.hide_free | default: "no" | jsonify }} === 'yes',
+          hideTitles: {{ extension.values.hide_titles | default: "" | jsonify }}
         });
         var tomorrow = tmr.all_day.length ? tmr.all_day[0].title + ' (all day)'
           : tmr.timeline.length ? tmr.timeline[0].title + ' at ' + tmr.timeline[0].start

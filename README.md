@@ -27,6 +27,7 @@ The template does the calendar work in the browser that renders the screen:
 - It converts every time to the timezone you set.
 - It hides events you declined.
 - It can hide timed events marked **Free**.
+- It can hide events by title, with the **Hide events** setting.
 
 ## How it works
 
@@ -67,6 +68,7 @@ A script at the bottom of the template works out which events fall on today and 
 | `locale` | `en-GB` | Language for weekday and month names, such as `el-GR`. |
 | `max_events` | `7` | Maximum number of events in the agenda list. |
 | `hide_free` | `no` | Set to `yes` to hide timed events marked Free. |
+| `hide_titles` | empty | Phrases separated by commas, such as `Core working hours, Lunch`. Hides every event whose title contains one of them. Case does not matter. |
 | `title` | `Google Calendar` | Text in the title bar. |
 | `layout` | `timeline` | `timeline`, `focus` or `agenda`. |
 | `day_start` | `9` | First hour of the timeline. An earlier event stretches the grid. |
