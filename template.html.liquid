@@ -142,7 +142,6 @@
       /* ---------- focus (big countdown above the day view) ---------- */
       .gfo__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 3px solid black; }
       .gfo__date { font-size: 26px; font-weight: 700; }
-      .gfo__updated { font-size: 13px; color: #555; }
       .gfo__hero { display: flex; flex-direction: column; gap: 6px; padding: 14px 0 10px; }
       .gfo__count { font-size: 64px; font-weight: 800; line-height: 0.95; letter-spacing: -2px; }
       .gfo__title { font-size: 30px; font-weight: 500; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -644,12 +643,9 @@ if (typeof module !== 'undefined') module.exports = GCal;
           : tmr.timeline.length ? tmr.timeline[0].title + ' at ' + tmr.timeline[0].start
           : 'nothing scheduled';
 
-        // Remove the title bar, not just hide it: the framework shortens `.layout:has(+.title_bar)` to make room for it.
-        var titleBar = root.parentNode.querySelector('.title_bar');
-        if (titleBar) titleBar.remove();
+        // "Updated" lives in the standard title bar at the bottom, like other extensions.
         root.innerHTML = '<div class="gtl">' +
-          '<div class="gfo__head"><span class="gfo__date">' + esc(cal.weekday + ' ' + cal.day + ' ' + cal.month) + '</span>' +
-          '<span class="gfo__updated">Updated ' + esc(cal.updated) + '</span></div>' +
+          '<div class="gfo__head"><span class="gfo__date">' + esc(cal.weekday + ' ' + cal.day + ' ' + cal.month) + '</span></div>' +
           '<div class="gfo__hero">' + heroHtml + '</div>' + allDay +
           '<div class="gtl__grid" id="gtl-grid"></div>' +
           '<div class="gfo__foot">Tomorrow: ' + esc(tomorrow) + '</div></div>';
