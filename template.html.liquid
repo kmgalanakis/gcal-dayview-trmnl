@@ -337,6 +337,8 @@ var GCal = (function () {
 
     function addTimed(ev, start, end) {
       if (!(start < dayEnd && end > dayStart)) return;
+      // A timed event that covers the whole day (for example 00:00 to 00:00) goes in the all-day row.
+      if (start <= dayStart && end >= dayEnd) return addAllDay(ev);
       var key = (ev.u || ev.t) + '|' + start;
       if (seen[key]) return;
       seen[key] = true;
