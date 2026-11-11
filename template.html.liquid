@@ -148,7 +148,6 @@
       .gfo__title { font-size: 30px; font-weight: 500; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .gfo__time { font-size: 18px; color: #555; }
       .gfo__foot { padding-top: 6px; margin-top: 6px; border-top: 2px solid black; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .gfo .title_bar { display: none; }
 
       /* ---------- portrait (model rotation 90/270 → 480×800) ---------- */
       .screen--portrait .gcal { flex-direction: column; gap: 14px; }
@@ -645,7 +644,9 @@ if (typeof module !== 'undefined') module.exports = GCal;
           : tmr.timeline.length ? tmr.timeline[0].title + ' at ' + tmr.timeline[0].start
           : 'nothing scheduled';
 
-        root.parentNode.classList.add('gfo');
+        // Remove the title bar, not just hide it: the framework shortens `.layout:has(+.title_bar)` to make room for it.
+        var titleBar = root.parentNode.querySelector('.title_bar');
+        if (titleBar) titleBar.remove();
         root.innerHTML = '<div class="gtl">' +
           '<div class="gfo__head"><span class="gfo__date">' + esc(cal.weekday + ' ' + cal.day + ' ' + cal.month) + '</span>' +
           '<span class="gfo__updated">Updated ' + esc(cal.updated) + '</span></div>' +
